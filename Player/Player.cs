@@ -2197,7 +2197,7 @@ namespace MCLawl
                     Server.s.PlayerListUpdate();
                     left.Add(this.name.ToLower(), this.ip);
 
-                    if (Server.AutoLoad && level.unload)
+                    /*if (Server.AutoLoad && level.unload)
                     {
                         foreach (Player pl in Player.players)
                             if (pl.level == level) return;
@@ -2205,7 +2205,7 @@ namespace MCLawl
                         {
                             level.Unload();
                         }
-                    }
+                    }*/
 
                     try
                     {
