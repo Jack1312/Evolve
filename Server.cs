@@ -122,8 +122,9 @@ namespace MCLawl
         #region Server Settings
         public const byte version = 7;
         public static string salt = "";
+        public static string URL = "";
 
-        public static string name = "[MCLawl] Default";
+        public static string name = "[Evolve] Default";
         public static string motd = "Welcome!";
         public static byte players = 12;
         public static byte maps = 5;

@@ -36,32 +36,25 @@ namespace MCLawl
 
     public static class Heartbeat
     {
-        //static int _timeout = 60 * 1000;
 
         static string hash;
         public static string serverURL;
         static string staticVars;
-        static string players = "";
-        static string worlds = "";
 
-        //static BackgroundWorker worker;
         static HttpWebRequest request;
-        static Random lawlBeatSeed = new Random(Process.GetCurrentProcess().Id);
         static StreamWriter beatlogger;
 
         static System.Timers.Timer heartbeatTimer = new System.Timers.Timer(500);
-        static System.Timers.Timer lawlBeatTimer;
 
         public static void Init()
         {
-            if(Server.logbeat)
+            if (Server.logbeat)
             {
-                if(!File.Exists("heartbeat.log"))
+                if (!File.Exists("heartbeat.log"))
                 {
                     File.Create("heartbeat.log").Close();
                 }
             }
-            lawlBeatTimer = new System.Timers.Timer(1000 + lawlBeatSeed.Next(0, 2500));
             staticVars = "port=" + Server.port +
                             "&max=" + Server.players +
                             "&name=" + UrlEncode(Server.name) +
@@ -72,29 +65,21 @@ namespace MCLawl
             {
                 heartbeatTimer.Elapsed += delegate
                 {
-                    heartbeatTimer.Interval = 55000;
+                    heartbeatTimer.Interval = 60000;
                     try
                     {
-                        Pump(Beat.Minecraft);
-                        // Pump(Beat.TChalo);
+                        if (Server.pub == true)
+                        {
+                            Pump(Beat.Minecraft);
+                            Pump(Beat.Evolve);
+                        }
+                        else
+                            Pump(Beat.Minecraft);
+
                     }
                     catch (Exception e) { Server.ErrorLog(e); }
                 };
                 heartbeatTimer.Start();
-
-                lawlBeatTimer.Elapsed += delegate
-                {
-                    lawlBeatTimer.Interval = 300000;
-                    try
-                    {
-                        Pump(Beat.MCLawl);;
-                    }
-                    catch (Exception e)
-                    {
-                        Server.ErrorLog(e);
-                    }
-                };
-                lawlBeatTimer.Start();
             }));
             backupThread.Start();
         }
@@ -105,11 +90,17 @@ namespace MCLawl
 
             string url = "http://www.minecraft.net/heartbeat.jsp";
             int totalTries = 0;
-    retry:  try
+        retry: try
             {
                 int hidden = 0;
+                foreach (Player p in Player.players)
+                {
+                    if (p.hidden)
+                    {
+                        hidden++;
+                    }
+                }
                 totalTries++;
-                // append additional information as needed
                 switch (type)
                 {
                     case Beat.Minecraft:
@@ -119,80 +110,14 @@ namespace MCLawl
                         }
                         postVars += "&salt=" + Server.salt;
                         goto default;
-                    case Beat.MCLawl:
-                        if (hash == null)
-                        {
-                            throw new Exception("Hash not set");
-                        }
-
-                        url = "http://www.mclawl.tk/hbannounce.php";
-
-                        if (Player.number > 0)
-                        {
-                            players = "";
-                            foreach (Player p in Player.players)
-                            {
-                                if (p.hidden)
-                                {
-                                    hidden++;
-                                    continue;
-                                }
-                                players += p.name + " (" + p.group.name + ")" + ",";
-                            }
-                            if (Player.number - hidden > 0)
-                                postVars += "&players=" + players.Substring(0, players.Length - 1);
-                        }
-
-                        worlds = "";
-                        foreach (Level l in Server.levels)
-                        {
-                            worlds += l.name + ",";
-                            postVars += "&worlds=" + worlds.Substring(0, worlds.Length - 1);
-                        }
-
-                        postVars += "&motd=" + UrlEncode(Server.motd) +
-                                "&lvlcount=" + (byte)Server.levels.Count +
-                                "&lawlversion=" + Server.Version.Replace(".0", "") +
-                                "&hash=" + hash;
-
-                        goto default;
-                    case Beat.TChalo:
-                        if (hash == null)
-                            throw new Exception("Hash not set");
-
-                        url = "http://minecraft.tchalo.com/announce.php";
-
-                        // build list of current players in server
-                        if (Player.number > 0)
-                        {
-                            players = "";
-                            foreach (Player p in Player.players)
-                            {
-                                if (p.hidden)
-                                {
-                                    hidden++;
-                                    continue;
-                                }
-                                players += p.name + ",";
-                            }
-                            if (Player.number - hidden > 0)
-                                postVars += "&players=" + players.Substring(0, players.Length - 1);
-                        }
-
-                        worlds = "";
-                        foreach (Level l in Server.levels)
-                        {
-                            worlds += l.name + ",";
-                            postVars += "&worlds=" + worlds.Substring(0, worlds.Length - 1);
-                        }
-
-                        postVars += "&motd=" + UrlEncode(Server.motd) +
-                                "&hash=" + hash +
-                                "&data=" + Server.Version + "," + System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString() +
-                                "&server=MCLawl" +
-                                "&details=Running MCLawl version " + Server.Version;
-
-                        goto default;
+                    case Beat.Evolve:
+                        postVars = "sname=" + Server.name
+                            + "&maxp=" + Server.players
+                            + "&nowp=" + (Player.number - hidden)
+                            + "&URL=" + Server.URL.Trim()
+                            + "&version=" + Server.Version;
+                        url = "http://Evolve.x10.mx/hbannounce.php";
+                        break;
                     default:
                         postVars += "&users=" + (Player.number - hidden);
                         break;
@@ -207,7 +132,7 @@ namespace MCLawl
                 request.ContentLength = formData.Length;
                 request.Timeout = 15000;
 
-   retryStream: try
+            retryStream: try
                 {
                     using (Stream requestStream = request.GetRequestStream())
                     {
@@ -221,7 +146,6 @@ namespace MCLawl
                 }
                 catch (WebException e)
                 {
-                    //Server.ErrorLog(e);
                     if (e.Status == WebExceptionStatus.Timeout)
                     {
                         if (type == Beat.Minecraft && Server.logbeat)
@@ -229,7 +153,6 @@ namespace MCLawl
                             beatlogger.WriteLine("Timeout detected at " + DateTime.Now.ToString());
                         }
                         goto retryStream;
-                        //throw new WebException("Failed during request.GetRequestStream()", e.InnerException, e.Status, e.Response);
                     }
                     else if (type == Beat.Minecraft && Server.logbeat)
                     {
@@ -238,27 +161,25 @@ namespace MCLawl
                     }
                 }
 
-                //if (hash == null)
-                //{
                 using (WebResponse response = request.GetResponse())
                 {
                     using (StreamReader responseReader = new StreamReader(response.GetResponseStream()))
                     {
                         if (hash == null)
                         {
-                            string line = responseReader.ReadLine();
+                            string line = responseReader.ReadToEnd();
                             if (type == Beat.Minecraft && Server.logbeat)
                             {
                                 beatlogger.WriteLine("Response received at " + DateTime.Now.ToString());
                                 beatlogger.WriteLine("Received: " + line);
                             }
                             hash = line.Substring(line.LastIndexOf('=') + 1);
-                            serverURL = line;
-
-                            //serverURL = "http://" + serverURL.Substring(serverURL.IndexOf('.') + 1);
-                            Server.s.UpdateUrl(serverURL);
-                            File.WriteAllText("text/externalurl.txt", serverURL);
-                            Server.s.Log("URL found: " + serverURL);
+                            string newhash = hash.Trim();
+                            String newUrl = "http://www.minecraft.net/play.jsp?server=" + newhash;
+                            Server.URL = newhash;
+                            Server.s.UpdateUrl(newUrl);
+                            File.WriteAllText("text/externalurl.txt", newUrl);
+                            Server.s.Log("URL found: " + newUrl);
                         }
                         else if (type == Beat.Minecraft && Server.logbeat)
                         {
@@ -266,8 +187,6 @@ namespace MCLawl
                         }
                     }
                 }
-                //}
-                //Server.s.Log(string.Format("Heartbeat: {0}", type));
             }
             catch (WebException e)
             {
@@ -324,44 +243,9 @@ namespace MCLawl
             }
             return output.ToString();
         }
-
-        /* public static Int32 MACToInt()
-        {
-            var nics = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces();
-            if (Server.mono)
-            {
-                foreach (var nic in nics)
-                {
-                    if (nic.Name != "l0")
-                    {
-                        nics[0] = nic;
-                        break;
-                    }
-                }
-            }
-            string MAC = nics[0].GetPhysicalAddress().ToString();
-            Regex regex = new Regex(@"[^0-9a-f]");
-            MAC = regex.Replace(MAC, "");
-            Int32 seed = 0;
-     retry: try
-            {
-                seed = Convert.ToInt32(MAC);
-            }
-            catch (OverflowException)
-            {
-                MAC = MAC.Remove(MAC.Length - 1);
-                goto retry;
-            }
-            catch(FormatException)
-            {
-                seed = new Random().Next();
-            }
-            return seed;
-        } */
-
         public static char[] reservedChars = { ' ', '!', '*', '\'', '(', ')', ';', ':', '@', '&',
                                                  '=', '+', '$', ',', '/', '?', '%', '#', '[', ']' };
     }
 
-    public enum Beat { Minecraft, TChalo, MCLawl }
+    public enum Beat { Minecraft, Evolve }
 }

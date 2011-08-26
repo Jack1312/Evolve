@@ -40,7 +40,7 @@ namespace MCLawl
         {
             try
             {
-                Heartbeat.Pump(Beat.MCLawl);
+                Heartbeat.Pump(Beat.Evolve);
             }
             catch (Exception e)
             {
