@@ -1,0 +1,6 @@
+﻿1.0.0.0
+- Fixed undo bug.
+- Fixed heartbeat - Now gives a URL.
+- Added command: /patrol - Teleports you to a random guest player.
+- Added command: /xban [Player] - Ban, ip-ban, undo and kick a player, all-in-one.
+- Added command: /xundo [Player] - Undo all the actions of the specified player.
