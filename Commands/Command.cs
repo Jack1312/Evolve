@@ -200,6 +200,7 @@ namespace MCLawl
             all.Add(new CmdAwardMod());
             all.Add(new CmdXBan());
             all.Add(new CmdXUndo());
+            all.Add(new CmdPatrol());
 
             core.commands = new List<Command>(all.commands);
 
