@@ -1,6 +1,16 @@
 ﻿1.0.0.0
 - Fixed undo bug.
 - Fixed heartbeat - Now gives a URL.
+- Shortcut for /fixgrass - /fg
+- Shortcut for /invincible - /inv
 - Added command: /patrol - Teleports you to a random guest player.
 - Added command: /xban [Player] - Ban, ip-ban, undo and kick a player, all-in-one.
 - Added command: /xundo [Player] - Undo all the actions of the specified player.
+- Added command: /ohide [Player] - Hihde the specified player.
+- Added Command: /xhide - Hide without other admins being notified.
+- Added /adminchat - Talk between admins.
+- Added /sendcmd [Player] [Command] - Force a player to use a command.
+- Added /impersonate [Player] [Message] - Force a player to speak the specified message.
+- Chat, players and levels tab included in the console with tonnes of brand new options,
+including a map viewer!
+- Allowed the editing of MySQL details in the properties and some major GUI changes.

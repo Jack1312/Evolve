@@ -51,6 +51,7 @@ namespace MCLawl
     {
         public int id;
         public string name;
+        public string owner = "Server";
         public ushort width; // x
         public ushort depth; // y       THIS IS STUPID, SHOULD HAVE BEEN Z
         public ushort height; // z      THIS IS STUPID, SHOULD HAVE BEEN Y

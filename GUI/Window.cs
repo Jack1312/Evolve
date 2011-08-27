@@ -1,7 +1,7 @@
 /*
 	Copyright 2010 MCSharp team (Modified for use with MCZall/MCLawl/Evolve) 
     Dual-Licensed under the Educational Community License, Version 2.0 and
-    the binpress license you mayy not use this file except in compliance with 
+    the binpress license you may not use this file except in compliance with 
     the License. You may obtain a copy of the Licenses at
 	
 	http://www.osedu.org/licenses/ECL-2.0
@@ -25,11 +25,13 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Text;
 using System.Windows.Forms;
 using System.Threading;
 using System.Text.RegularExpressions;
+using System.Net;
 using MCLawl;
 
 namespace MCLawl.Gui
@@ -49,6 +51,16 @@ namespace MCLawl.Gui
         //  public static bool Minimized = false;
         
         internal static Server s;
+
+        private Level levelGenerater;
+        private bool generatorUsed = false;
+        private Level levelExisted = null;
+        Form mapForm = new Form();
+        private bool formShow = false;
+        PictureBox map2 = new PictureBox();
+
+        Player playerstatsplayer;
+        Player console;
 
         bool shuttingDown = false;
         public Window() {
@@ -83,8 +95,11 @@ namespace MCLawl.Gui
         private void Window_Load(object sender, EventArgs e) {
             thisWindow = this;
             MaximizeBox = false;
-            this.Text = "<server name here>";
-            this.Icon = new Icon(System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("MCLawl.Lawl.ico"));
+            this.Text = Server.name;
+
+            mapForm.Name = "mapForm";
+            mapForm.FormClosed += new System.Windows.Forms.FormClosedEventHandler(mapForm_Closed);
+            mapForm.Controls.Add(map2);
 
             this.Show();
             this.BringToFront();
@@ -92,6 +107,9 @@ namespace MCLawl.Gui
 
             s = new Server();
             s.OnLog += WriteLine;
+            s.OnAdminChat += AdminWrite;
+            s.OnOpChat += OpWrite;
+            s.OnGlobalChat += GlobalWrite;
             s.OnCommand += newCommand;
             s.OnError += newError;
             s.OnSystem += newSystem;
@@ -105,7 +123,7 @@ namespace MCLawl.Gui
             s.OnPlayerListChange += UpdateClientList;
             s.OnSettingsUpdate += SettingsUpdate;
             s.Start();
-            notifyIcon1.Text = ("MCLawl Server: " + Server.name);
+            notifyIcon1.Text = ("Evolve Server: " + Server.name);
 
             this.notifyIcon1.ContextMenuStrip = this.iconContext;
             this.notifyIcon1.Icon = this.Icon;
@@ -117,6 +135,12 @@ namespace MCLawl.Gui
                 UpdateMapList("'");
             }; MapTimer.Start();
 
+            System.Timers.Timer PlayerTimer = new System.Timers.Timer(10000);
+            PlayerTimer.Elapsed += delegate
+            {
+                UpdateClientList(Player.players);
+            }; PlayerTimer.Start();
+
             //if (File.Exists(Logger.ErrorLogPath))
                 //txtErrors.Lines = File.ReadAllLines(Logger.ErrorLogPath);
             if (File.Exists("extra/Changelog.txt"))
@@ -124,7 +148,7 @@ namespace MCLawl.Gui
                 txtChangelog.Text = "Changelog for " + Server.Version + ":";
                 foreach (string line in File.ReadAllLines(("extra/Changelog.txt")))
                 {
-                    txtChangelog.AppendText("\r\n           " + line);
+                    txtChangelog.AppendText("       " + line + "\r\n");
                 }            
             }
         }
@@ -137,7 +161,7 @@ namespace MCLawl.Gui
                 VoidDelegate d = new VoidDelegate(SettingsUpdate);
                 this.Invoke(d);
             }  else {
-                this.Text = Server.name + " MCLawl Version: " + Server.Version;
+                this.Text = Server.name + " Evolve Version: " + Server.Version;
             }
         }
 
@@ -177,6 +201,7 @@ namespace MCLawl.Gui
         }
 
         delegate void LogDelegate(string message);
+        delegate void ListDelegate(string message);
 
         /// <summary>
         /// Does the same as Console.Write() only in the form
@@ -202,7 +227,7 @@ namespace MCLawl.Gui
                 LogDelegate d = new LogDelegate(WriteLine);
                 this.Invoke(d, new object[] { s });
             } else {
-                txtLog.AppendText("\r\n" + s);
+                txtLog.AppendText(s + "\r\n");
             }
         }
         /// <summary>
@@ -214,8 +239,40 @@ namespace MCLawl.Gui
                 PlayerListCallback d = new PlayerListCallback(UpdateClientList);
                 this.Invoke(d, new object[] { players });
             } else {
+                dgvPlayers.Rows.Clear();
+                Player.players.ForEach(delegate(Player p) { string[] row = { p.name, p.group.name, p.level.name }; dgvPlayers.Rows.Add(row); });
+                //Handles the Players Tab Shit
                 liClients.Items.Clear();
-                Player.players.ForEach(delegate(Player p) { liClients.Items.Add(p.name); });
+                dgvPlayerStats.Rows.Clear();
+                Player.players.ForEach(delegate(Player p) { string[] row1 = { p.name, p.title, p.group.name, p.money.ToString(), p.level.name, p.totalLogins.ToString(), p.overallBlocks.ToString() }; dgvPlayerStats.Rows.Add(row1);
+                liClients.Items.Add(p.name);
+                if (File.Exists("ranks/banned-ip.txt"))
+                {
+                    cmbIpBans.Items.Clear();
+                    foreach (string line in File.ReadAllLines(("ranks/banned-ip.txt")))
+                    {
+                        cmbIpBans.Items.Add(line);
+                    }
+                }
+                if (txtPName.Text != "[Selected Player]")
+                {
+                    liClients.SelectedIndex = 0;
+                }
+                else if (!liClients.Items.Contains(txtPName.Text))
+                {
+                    liClients.SelectedIndex = 0;
+                }
+                else
+                {
+                    for (int i = 0; i < liClients.Items.Count; i++)
+                    {
+                        if (liClients.Items[i].ToString().Contains(txtPName.Text))
+                        {
+                            liClients.SelectedIndex = i;
+                        }
+                    }
+                }
+                });
             }
         }
 
@@ -224,9 +281,44 @@ namespace MCLawl.Gui
                 LogDelegate d = new LogDelegate(UpdateMapList);
                 this.Invoke(d, new object[] { blah });
             } else {
-                liMaps.Items.Clear();
+                dgvMaps.Rows.Clear();
+                dataGridView1.Rows.Clear();
+                cmbMaps.Items.Clear();
                 foreach (Level level in Server.levels) {
-                    liMaps.Items.Add(level.name + " - " + level.physics);
+                    cmbMaps.Items.Add(level.name);
+                    string[] row = { level.name, level.players.Count.ToString(), level.physics.ToString(), level.permissionbuild.ToString() };
+                    dgvMaps.Rows.Add(row);
+                    string[] row1 = { level.name, level.players.Count.ToString(), level.physics.ToString(), level.permissionbuild.ToString(), level.permissionvisit.ToString(), level.owner, level.width.ToString(), level.depth.ToString(), level.height.ToString() };
+                    dataGridView1.Rows.Add(row1);
+                    cmbRanks.Items.Clear();
+                    foreach (Group grp in Group.GroupList)
+                    {
+                        if (grp.name != "nobody")
+                            cmbRanks.Items.Add(grp.name);
+                    }
+                    List<string> loadedmapslist = new List<string>(Server.levels.Count);
+                    List<string> unloadedmapslist = new List<string>();
+                    DirectoryInfo di = new DirectoryInfo("levels/");
+                    FileInfo[] fi = di.GetFiles("*.lvl");
+                    Thread.Sleep(10);
+                    foreach (Level l in Server.levels) { loadedmapslist.Add(l.name.ToLower()); }
+                    foreach (FileInfo file in fi)
+                    {
+                        if (!loadedmapslist.Contains(file.Name.Replace(".lvl", "").ToLower()))
+                        {
+                            unloadedmapslist.Add(file.Name.Replace(".lvl", ""));
+                        }
+                    }
+                    UnloadedMaps.Items.Clear();
+                    foreach (String unloaded in unloadedmapslist)
+                    {
+                        UnloadedMaps.Items.Add(unloaded);
+                    }
+                    LoadedMaps.Items.Clear();
+                    foreach (String loaded in loadedmapslist)
+                    {
+                        LoadedMaps.Items.Add(loaded);
+                    }
                 }
             }
         }
@@ -264,14 +356,26 @@ namespace MCLawl.Gui
                 {
                     newtext = text.Remove(0, 1).Trim();
                     Player.GlobalMessageOps("To Ops &f-"+Server.DefaultColor +"Console [&a" + Server.ZallState + Server.DefaultColor + "]&f- " + newtext);
+                    Server.s.OpChat("<CONSOLE> " + newtext);
                     Server.s.Log("(OPs): Console: " + newtext);
                     IRCBot.Say("Console: " + newtext, true);
                  //   WriteLine("(OPs):<CONSOLE> " + txtInput.Text);
                     txtInput.Clear();
                 }
+                else if (txtInput.Text[0] == '*')
+                {
+                    newtext = text.Remove(0, 1).Trim();
+                    Player.GlobalMessageAdmins("To Admins &f-" + Server.DefaultColor + "Console [&a" + Server.ZallState + Server.DefaultColor + "]&f- " + newtext);
+                    Server.s.AdminChat("<CONSOLE> " + newtext);
+                    Server.s.Log("(Admins): Console: " + newtext);
+                    IRCBot.Say("Console: " + newtext, true);
+                    //   WriteLine("(Admins):<CONSOLE> " + txtInput.Text);
+                    txtInput.Clear();
+                }
                 else
                 {
                     Player.GlobalMessage("Console [&a" + Server.ZallState + Server.DefaultColor + "]: &f" + txtInput.Text);
+                    Server.s.GlobalChat("<CONSOLE> " + newtext);
                     IRCBot.Say("Console [" + Server.ZallState + "]: " + txtInput.Text);
                     WriteLine("<CONSOLE> " + txtInput.Text);
                     txtInput.Clear();
@@ -330,7 +434,7 @@ namespace MCLawl.Gui
             }
             else
             {
-                txtCommandsUsed.AppendText("\r\n" + p); 
+                txtCommandsUsed.AppendText(p + "\r\n\r\n"); 
             }
         }
 
@@ -427,165 +531,6 @@ namespace MCLawl.Gui
             MCLawl_.Gui.Program.ExitProgram(false); 
         }
 
-        private void voiceToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            if (this.liClients.SelectedIndex != -1)
-            {
-                Command.all.Find("voice").Use(null, this.liClients.SelectedItem.ToString());
-            }
-        }
-
-        private void whoisToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            if (this.liClients.SelectedIndex != -1)
-            {
-                Command.all.Find("whois").Use(null, this.liClients.SelectedItem.ToString());
-            }
-        }
-
-        private void kickToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            if (this.liClients.SelectedIndex != -1)
-            {
-                Command.all.Find("kick").Use(null, this.liClients.SelectedItem.ToString() + " You have been kicked by the console.");
-            }
-        }
-
-
-        private void banToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            if (this.liClients.SelectedIndex != -1)
-            {
-                Command.all.Find("ban").Use(null, this.liClients.SelectedItem.ToString());
-            }
-        }
-
-        private void liClients_MouseDown(object sender, MouseEventArgs e)
-        {
-            int i;
-            i = liClients.IndexFromPoint(e.X, e.Y);
-            liClients.SelectedIndex = i;
-        }
-
-        private void toolStripMenuItem2_Click(object sender, EventArgs e)
-        {
-            if (this.liMaps.SelectedIndex != -1)
-            {
-                Command.all.Find("physics").Use(null, this.liMaps.SelectedItem.ToString().Remove((this.liMaps.SelectedItem.ToString().Length - 4)) + " 0");
-            }
-        }
-
-        private void toolStripMenuItem3_Click(object sender, EventArgs e)
-        {
-            if (this.liMaps.SelectedIndex != -1)
-            {
-                Command.all.Find("physics").Use(null, this.liMaps.SelectedItem.ToString().Remove((this.liMaps.SelectedItem.ToString().Length - 4)) + " 1");
-            }
-        }
-
-        private void toolStripMenuItem4_Click(object sender, EventArgs e)
-        {
-            if (this.liMaps.SelectedIndex != -1)
-            {
-                Command.all.Find("physics").Use(null, this.liMaps.SelectedItem.ToString().Remove((this.liMaps.SelectedItem.ToString().Length - 4)) + " 2");
-            }
-        }
-
-        private void toolStripMenuItem5_Click(object sender, EventArgs e)
-        {
-            if (this.liMaps.SelectedIndex != -1)
-            {
-                Command.all.Find("physics").Use(null, this.liMaps.SelectedItem.ToString().Remove((this.liMaps.SelectedItem.ToString().Length - 4)) + " 3");
-            }
-        }
-
-        private void toolStripMenuItem6_Click(object sender, EventArgs e)
-        {
-            if (this.liMaps.SelectedIndex != -1)
-            {
-                Command.all.Find("physics").Use(null, this.liMaps.SelectedItem.ToString().Remove((this.liMaps.SelectedItem.ToString().Length - 4)) + " 4");
-            }
-        }
-
-        private void unloadToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            if (this.liMaps.SelectedIndex != -1)
-            {
-                Command.all.Find("unload").Use(null, this.liMaps.SelectedItem.ToString().Remove((this.liMaps.SelectedItem.ToString().Length - 4)));
-            }
-        }
-
-        private void finiteModeToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            if (this.liMaps.SelectedIndex != -1)
-            {
-                Command.all.Find("map").Use(null, this.liMaps.SelectedItem.ToString().Remove((this.liMaps.SelectedItem.ToString().Length - 4)) + " finite");
-            }
-        }
-
-        private void animalAIToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            if (this.liMaps.SelectedIndex != -1)
-            {
-                Command.all.Find("map").Use(null, this.liMaps.SelectedItem.ToString().Remove((this.liMaps.SelectedItem.ToString().Length - 4)) + " ai");
-            }
-        }
-
-        private void edgeWaterToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            if (this.liMaps.SelectedIndex != -1)
-            {
-                Command.all.Find("map").Use(null, this.liMaps.SelectedItem.ToString().Remove((this.liMaps.SelectedItem.ToString().Length - 4)) + " edge");
-            }
-        }
-
-        private void growingGrassToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            if (this.liMaps.SelectedIndex != -1)
-            {
-                Command.all.Find("map").Use(null, this.liMaps.SelectedItem.ToString().Remove((this.liMaps.SelectedItem.ToString().Length - 4)) + " grass");
-            }
-        }
-
-        private void survivalDeathToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            if (this.liMaps.SelectedIndex != -1)
-            {
-                Command.all.Find("map").Use(null, this.liMaps.SelectedItem.ToString().Remove((this.liMaps.SelectedItem.ToString().Length - 4)) + " death");
-            }
-        }
-
-        private void killerBlocksToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            if (this.liMaps.SelectedIndex != -1)
-            {
-                Command.all.Find("map").Use(null, this.liMaps.SelectedItem.ToString().Remove((this.liMaps.SelectedItem.ToString().Length - 4)) + " killer");
-            }
-        }
-
-        private void rPChatToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            if (this.liMaps.SelectedIndex != -1)
-            {
-                Command.all.Find("map").Use(null, this.liMaps.SelectedItem.ToString().Remove((this.liMaps.SelectedItem.ToString().Length - 4)) + " chat");
-            }
-        }
-
-        private void saveToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            if (this.liMaps.SelectedIndex != -1)
-            {
-                Command.all.Find("save").Use(null, this.liMaps.SelectedItem.ToString().Remove((this.liMaps.SelectedItem.ToString().Length - 4)));
-            }
-        }
-
-        private void liMaps_MouseDown(object sender, MouseEventArgs e)
-        {
-            int i;
-            i = liMaps.IndexFromPoint(e.X, e.Y);
-            liMaps.SelectedIndex = i;
-        }
-
         private void tabControl1_Click(object sender, EventArgs e)
         {
             foreach (TabPage tP in tabControl1.TabPages)
@@ -599,6 +544,1254 @@ namespace MCLawl.Gui
                     }
                 }
             }
+        }
+
+        private void txtCommandsUsed_TextChanged(object sender, EventArgs e)
+        {
+
+        }
+
+        private void button2_Click(object sender, EventArgs e)
+        {
+            Application.Restart();
+        }
+
+        private void button3_Click_1(object sender, EventArgs e)
+        {
+            try
+            {
+                txtChangelog.Text = "";
+                WebClient Client = new WebClient();
+                Client.DownloadFile("http://www.evolvemc.net/changelog.txt", "extra/Changelog.txt");
+                if (File.Exists("extra/Changelog.txt"))
+                {
+                    txtChangelog.Text = "Changelog for r" + Server.Version + ":";
+                    foreach (string line in File.ReadAllLines(("extra/Changelog.txt")))
+                    {
+                        txtChangelog.AppendText("\r\n" + line);
+                    }
+                }
+                Client.Dispose();
+            }
+            catch
+            {
+                MessageBox.Show("Something went wrong =S.... unable to get or load new Changelog!");
+                return;
+                }
+        }
+
+        private void button4_Click(object sender, EventArgs e)
+        {
+            if (txtUrl.Text == ""){ } else { System.Diagnostics.Process.Start(txtUrl.Text); }
+        }
+
+        private void button2_Click_1(object sender, EventArgs e)
+        {
+            Application.Restart();
+        }
+
+        private void btnUpdate_Click(object sender, EventArgs e)
+        {
+            UpdateWindow Window = new UpdateWindow();
+            Window.Show();
+        }
+
+        /*public void loadCmdlist()
+        {
+            txtAvailable.Items.Clear();
+            txtDownloaded.Items.Clear();
+            WebClient Client = new WebClient();
+            Client.DownloadFile("http://www.MCLawl.x10.mx/custom_commands/cmdlist.txt", "extra/cmdlist.txt");
+            if (File.Exists("extra/cmdlist.txt"))
+            {
+                foreach (string line in File.ReadAllLines(("extra/cmdlist.txt")))
+                {
+                    txtAvailable.Items.Add(line);
+                }
+            }
+
+            DirectoryInfo di = new DirectoryInfo("extra/commands/dll");
+            FileInfo[] rgFiles = di.GetFiles("*.dll");
+            foreach (FileInfo fi in rgFiles)
+            {
+                txtDownloaded.Items.Add(fi);
+            }
+            Client.Dispose();
+        }*/
+
+        /*private void button1_Click(object sender, EventArgs e)
+        {
+            loadCmdlist();
+        }*/
+
+        public void GlobalWrite(string s)
+        {
+            if (Server.shuttingDown) return;
+            if (this.InvokeRequired)
+            {
+                LogDelegate d = new LogDelegate(GlobalWrite);
+                this.Invoke(d, new object[] { s });
+            }
+            else
+            {
+                txtGlobalChat.AppendText(s + "\r\n");
+            }
+        }
+
+        public void OpWrite(string s)
+        {
+            if (Server.shuttingDown) return;
+            if (this.InvokeRequired)
+            {
+                LogDelegate d = new LogDelegate(OpWrite);
+                this.Invoke(d, new object[] { s });
+            }
+            else
+            {
+                txtOpChat.AppendText(s + "\r\n");
+            }
+        }
+
+        public void AdminWrite(string s)
+        {
+            if (Server.shuttingDown) return;
+            if (this.InvokeRequired)
+            {
+                LogDelegate d = new LogDelegate(AdminWrite);
+                this.Invoke(d, new object[] { s });
+            }
+            else
+            {
+                txtAdminChat.AppendText(s + "\r\n");
+            }
+        }
+
+        /*private void txtAvailable_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            txtSelectedDownload.Text = txtAvailable.SelectedItem.ToString();
+        }
+
+        private void txtDownloadFile_Click(object sender, EventArgs e)
+        {
+            if (txtSelectedDownload.Text == "")
+            {
+                MessageBox.Show("No File Was Selected");
+            }
+            else
+            {
+                WebClient Client = new WebClient();
+                Client.DownloadFile("http://www.MCLawl.x10.mx/custom_commands/" + txtAvailable.SelectedItem.ToString() + ".dll", "extra/commands/dll/Cmd" + txtAvailable.SelectedItem.ToString() + ".dll");
+                Command.all.Find("cmdload").Use(null, txtSelectedDownload.Text);
+                Client.Dispose();
+            }
+            loadCmdlist();
+        }
+
+        private void txtDownloaded_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            txtSelectedFile.Text = txtDownloaded.SelectedItem.ToString();
+        }
+
+        private void txtDeleteFile_Click(object sender, EventArgs e)
+        {
+            if (txtDownloaded.SelectedItems.Count == 0)
+            {
+                MessageBox.Show("Please choose a file to delete first");
+            }
+            else if (File.Exists("extra/commands/dll/" + txtDownloaded.SelectedItem.ToString()))
+            {
+                File.Delete("extra/commands/dll/" + txtDownloaded.SelectedItem.ToString());
+            }
+            else
+            {
+                MessageBox.Show("File \"" + txtDownloaded.SelectedItem.ToString() + "\" was not found.");
+            }
+            loadCmdlist();
+        }*/
+
+        private void txtOpMessage_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter)
+            {
+                string newtext = txtOpMessage.Text;
+                Player.GlobalMessageOps("To Ops &f-" + Server.DefaultColor + "Console [&a" + Server.ZallState + Server.DefaultColor + "]&f- " + newtext);
+                Server.s.OpChat("<CONSOLE> " + newtext);
+                Server.s.Log("<CONSOLE> " + newtext);
+                IRCBot.Say("Console: " + newtext, true);
+                txtOpMessage.Clear();
+            }
+        }
+
+        private void txtAdminMessage_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter)
+            {
+                string newtext = txtAdminMessage.Text;
+                Player.GlobalMessageAdmins("To Admins &f-" + Server.DefaultColor + "Console [&a" + Server.ZallState + Server.DefaultColor + "]&f- " + newtext);
+                Server.s.AdminChat("<CONSOLE> " + newtext);
+                Server.s.Log("<CONSOLE> " + newtext);
+                IRCBot.Say("Console: " + newtext, true);
+                txtAdminMessage.Clear();
+            }
+        }
+
+        private void txtGlobalMessage_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter)
+            {
+                string newtext = txtGlobalMessage.Text;
+                Player.GlobalMessage("Console [&a" + Server.ZallState + Server.DefaultColor + "]&f- " + newtext);
+                Server.s.GlobalChat("<CONSOLE> " + newtext);
+                Server.s.Log("<CONSOLE> " + newtext);
+                IRCBot.Say("Console: " + newtext, true);
+                txtGlobalMessage.Clear();
+            }
+        }
+
+        private void button12_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                Command.all.Find("load").Use(null, UnloadedMaps.SelectedItem.ToString());
+                UpdateMapList("'");
+            }
+            catch { Server.s.Log("ERROR: Failed Map load!"); }
+        }
+
+        private void button14_Click(object sender, EventArgs e)
+        {
+            UpdateMapList("'");
+        }
+
+        private void button11_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                string lvl = LoadedMaps.SelectedItem.ToString();
+                foreach (Level level in Server.levels)
+                {
+                    if (level.name == lvl)
+                    {
+                        Command.all.Find("physics").Use(null, "0");
+                    }
+                    UpdateMapList("'");
+                }
+            }
+            catch
+            {
+                MessageBox.Show("Please choose a map first");
+            }
+        }
+
+        private void button6_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                string lvl = LoadedMaps.SelectedItem.ToString();
+                foreach (Level level in Server.levels)
+                {
+                    if (level.name == lvl)
+                    {
+                        Command.all.Find("physics").Use(null, "1");
+                    }
+                    UpdateMapList("'");
+                }
+            }
+            catch
+            {
+                MessageBox.Show("Please choose a map first");
+            }
+        }
+
+        private void button7_Click(object sender, EventArgs e)
+        {
+            try
+            {
+
+                string lvl = LoadedMaps.SelectedItem.ToString();
+                foreach (Level level in Server.levels)
+                {
+                    if (level.name == lvl)
+                    {
+                        Command.all.Find("physics").Use(null, "2");
+                    }
+                    UpdateMapList("'");
+                }
+            }
+            catch
+            {
+                MessageBox.Show("Please choose a map first");
+            }
+        }
+
+        private void button8_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                string lvl = LoadedMaps.SelectedItem.ToString();
+                foreach (Level level in Server.levels)
+                {
+                    if (level.name == lvl)
+                    {
+                        Command.all.Find("physics").Use(null, "3");
+                    }
+                    UpdateMapList("'");
+                }
+            }
+            catch
+            {
+                MessageBox.Show("Please choose a map first");
+            }
+        }
+
+        private void button9_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                string lvl = LoadedMaps.SelectedItem.ToString();
+                foreach (Level level in Server.levels)
+                {
+                    if (level.name == lvl)
+                    {
+                        Command.all.Find("physics").Use(null, "4");
+                    }
+                    UpdateMapList("'");
+                }
+            }
+            catch
+            {
+                MessageBox.Show("Please choose a map first");
+            }
+        }
+
+        private void btnUnload_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                string lvl = LoadedMaps.SelectedItem.ToString();
+                Command.all.Find("unload").Use(null, lvl);
+                UpdateMapList("'");
+            }
+            catch
+            {
+                MessageBox.Show("Please choose a level first");
+            }
+        }
+
+        private void button15_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                string lvl = LoadedMaps.SelectedItem.ToString();
+                Command.all.Find("deletelvl").Use(null, lvl);
+                UpdateMapList("'");
+            }
+            catch
+            {
+                MessageBox.Show("Please choose a level first");
+            }
+        }
+
+        private void button13_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                string lvl = UnloadedMaps.SelectedItem.ToString();
+                Command.all.Find("deletelvl").Use(null, lvl);
+                UpdateMapList("'");
+            }
+            catch
+            {
+                MessageBox.Show("Please choose a level first");
+            }
+        }
+
+        private void mapsStrip_Opening(object sender, CancelEventArgs e)
+        {
+
+        }
+
+        private void button10_Click(object sender, EventArgs e)
+        {
+            MessageBox.Show("Not Implemented Yet!");
+        }
+
+        #region PlayersTab
+
+        private void LoadPlayersTab(object sender, EventArgs e)
+        {
+            Player p = Player.Find(liClients.SelectedItem.ToString());
+            playerstatsplayer = p;
+            playerstatsplayer.level.name = p.level.name;
+            playerstatsplayer.group.name = p.group.name;
+            playerstatsplayer.money = p.money;
+            playerstatsplayer.deathCount = p.deathCount;
+            playerstatsplayer.title = p.title;
+            playerstatsplayer.ip = p.ip;
+            playerstatsplayer.overallBlocks.ToString();
+        }
+
+        private void btnJail_Click(object sender, EventArgs e)
+        {
+            if (liClients.SelectedItems.Count == 0)
+            {
+                MessageBox.Show("No Player Selected");
+                return;
+            }
+            else
+            {
+                string pl = liClients.SelectedItem.ToString();
+                Command.all.Find("jail").Use(null, playerstatsplayer.name);
+            }
+        }
+
+        private void btnMap_Click(object sender, EventArgs e)
+        {
+            if (liClients.SelectedItems.Count == 0)
+            {
+                MessageBox.Show("No Player Selected");
+                return;
+            }
+            else
+            {
+                try
+                {
+                    string pl = liClients.SelectedItem.ToString();
+                    foreach (Player p in Player.players)
+                    {
+                        if (p.name == pl)
+                        {
+                            Command.all.Find("goto").Use(playerstatsplayer, cmbMaps.SelectedItem.ToString());
+                        }
+                    }
+                }
+                catch
+                {
+                    MessageBox.Show("No map selected/Wrong map name");
+                }
+            }
+        }
+
+        private void btnKick_Click(object sender, EventArgs e)
+        {
+            if (liClients.SelectedItems.Count == 0)
+            {
+                MessageBox.Show("No Player Selected");
+                return;
+            }
+            else
+            {
+                string pl = liClients.SelectedItem.ToString();
+                Command.all.Find("kick").Use(null, pl + " " + txtKickReason.Text);
+            }
+        }
+
+        private void btnTitle_Click(object sender, EventArgs e)
+        {
+            if (liClients.SelectedItems.Count == 0)
+            {
+                MessageBox.Show("No Player Selected");
+                return;
+            }
+            else
+            {
+                try
+                {
+                    string pl = liClients.SelectedItem.ToString();
+                    Command.all.Find("title").Use(null, pl + " " + txtTitle.Text);
+                }
+                catch
+                {
+                    MessageBox.Show("Title is over 17 characters/Incorrect title");
+                }
+            }
+        }
+
+        private void btnRank_Click(object sender, EventArgs e)
+        {
+            if (liClients.SelectedItems.Count == 0)
+            {
+                MessageBox.Show("No Player Selected");
+                return;
+            }
+            else
+            {
+                try
+                {
+                    string pl = liClients.SelectedItem.ToString();
+                    Command.all.Find("rank").Use(null, pl + " " + cmbRanks.SelectedItem.ToString());
+                }
+                catch
+                {
+                    MessageBox.Show("Incorrect rank");
+                }
+            }
+        }
+
+        private void btnGive_Click(object sender, EventArgs e)
+        {
+            if (liClients.SelectedItems.Count == 0)
+            {
+                MessageBox.Show("No Player Selected");
+                return;
+            }
+            else
+                try
+                {
+                    {
+                        string pl = liClients.SelectedItem.ToString();
+                        Command.all.Find("give").Use(null, pl + " " + txtGive.Text);
+                    }
+                }
+                catch
+                {
+                    MessageBox.Show("Incorrect amount");
+                }
+        }
+
+        private void btnNick_Click(object sender, EventArgs e)
+        {
+            if (liClients.SelectedItems.Count == 0)
+            {
+                MessageBox.Show("No Player Selected");
+                return;
+            }
+            else
+            {
+                string pl = liClients.SelectedItem.ToString();
+                Command.all.Find("nick").Use(null, playerstatsplayer.name + " " + txtNickName.Text);
+            }
+        }
+
+        private void btnPromote_Click(object sender, EventArgs e)
+        {
+            if (liClients.SelectedItems.Count == 0)
+            {
+                MessageBox.Show("No Player Selected");
+                return;
+            }
+            else
+            {
+                try
+                {
+                    string pl = liClients.SelectedItem.ToString();
+                    Command.all.Find("promote").Use(null, pl);
+                }
+                catch
+                {
+                    MessageBox.Show("There is no higher rank");
+                }
+            }
+        }
+
+        private void btnDemote_Click(object sender, EventArgs e)
+        {
+            if (liClients.SelectedItems.Count == 0)
+            {
+                MessageBox.Show("No Player Selected");
+                return;
+            }
+            else
+            {
+                try
+                {
+                    string pl = liClients.SelectedItem.ToString();
+                    Command.all.Find("demote").Use(null, pl);
+                }
+                catch
+                {
+                    MessageBox.Show("There is no lower rank");
+                }
+            }
+        }
+
+        private void btnBan_Click(object sender, EventArgs e)
+        {
+            if (liClients.SelectedItems.Count == 0)
+            {
+                MessageBox.Show("No Player Selected");
+                return;
+            }
+            else
+            {
+                string pl = liClients.SelectedItem.ToString();
+                Command.all.Find("ban").Use(null, pl);
+            }
+        }
+
+        private void button17_Click(object sender, EventArgs e)
+        {
+            if (liClients.SelectedItems.Count == 0)
+            {
+                MessageBox.Show("No Player Selected");
+                return;
+            }
+            else
+            {
+                string pl = liClients.SelectedItem.ToString();
+                Command.all.Find("freeze").Use(console, playerstatsplayer.name);
+            }
+        }
+
+        private void button20_Click(object sender, EventArgs e)
+        {
+            if (liClients.SelectedItems.Count == 0)
+            {
+                MessageBox.Show("No Player Selected");
+                return;
+            }
+            else
+            {
+                string pl = liClients.SelectedItem.ToString();
+                Command.all.Find("slap").Use(console, playerstatsplayer.name);
+            }
+        }
+
+        private void button21_Click(object sender, EventArgs e)
+        {
+            if (liClients.SelectedItems.Count == 0)
+            {
+                MessageBox.Show("No Player Selected");
+                return;
+            }
+            else
+            {
+                string pl = liClients.SelectedItem.ToString();
+                Command.all.Find("hide").Use(playerstatsplayer, null);
+            }
+        }
+
+        private void button19_Click(object sender, EventArgs e)
+        {
+            if (liClients.SelectedItems.Count == 0)
+            {
+                MessageBox.Show("No Player Selected");
+                return;
+            }
+            else
+            {
+                string pl = liClients.SelectedItem.ToString();
+                Command.all.Find("kill").Use(playerstatsplayer, playerstatsplayer.name);
+            }
+        }
+
+        private void button18_Click(object sender, EventArgs e)
+        {
+            if (liClients.SelectedItems.Count == 0)
+            {
+                MessageBox.Show("No Player Selected");
+                return;
+            }
+            else
+            {
+                string pl = liClients.SelectedItem.ToString();
+                Command.all.Find("voice").Use(null, pl);
+            }
+        }
+
+        private void button16_Click(object sender, EventArgs e)
+        {
+            if (liClients.SelectedItems.Count == 0)
+            {
+                MessageBox.Show("No Player Selected");
+                return;
+            }
+            else
+            {
+                string pl = liClients.SelectedItem.ToString();
+                Command.all.Find("joker").Use(null, pl);
+            }
+        }
+
+        private void btnMute_Click(object sender, EventArgs e)
+        {
+            if (liClients.SelectedItems.Count == 0)
+            {
+                MessageBox.Show("No Player Selected");
+                return;
+            }
+            else
+            {
+                string pl = liClients.SelectedItem.ToString();
+                Command.all.Find("mute").Use(null, pl);
+            }
+        }
+
+        private void btnRules_Click(object sender, EventArgs e)
+        {
+            if (liClients.SelectedItems.Count == 0)
+            {
+                MessageBox.Show("No Player Selected");
+                return;
+            }
+            else
+            {
+                string pl = liClients.SelectedItem.ToString();
+                Command.all.Find("rules").Use(playerstatsplayer, null);
+            }
+        }
+
+        private void button5_Click(object sender, EventArgs e)
+        {
+            if (liClients.SelectedItems.Count == 0)
+            {
+                MessageBox.Show("No Player Selected");
+                return;
+            }
+            else
+            {
+                string pl = liClients.SelectedItem.ToString();
+                Command.all.Find("banip").Use(null, pl);
+            }
+        }
+
+        private void button10_Click_1(object sender, EventArgs e)
+        {
+            if (liClients.SelectedItems.Count == 0)
+            {
+                MessageBox.Show("No Player Selected");
+                return;
+            }
+            else
+            {
+                string pl = liClients.SelectedItem.ToString();
+                Command.all.Find("trust").Use(null, pl);
+            }
+        }
+
+        private void btnColor_Click(object sender, EventArgs e)
+        {
+            if (liClients.SelectedItems.Count == 0)
+            {
+                MessageBox.Show("No Player Selected");
+                return;
+            }
+            else
+            {
+                try
+                {
+                    string selectedcolor = cmbColors.SelectedItem.ToString();
+                    string pl = liClients.SelectedItem.ToString();
+                    foreach (Player p in Player.players)
+                    {
+                        if (p.name == pl)
+                        {
+                            Command.all.Find("color").Use(playerstatsplayer, cmbColors.SelectedItem.ToString());
+                        }
+                    }
+                }
+                catch
+                {
+                    MessageBox.Show("There is no color with that name");
+                }
+            }
+        }
+
+        private void button14_Click_1(object sender, EventArgs e)
+        {
+            if (liClients.SelectedItems.Count == 0)
+            {
+                MessageBox.Show("No Player Selected");
+                return;
+            }
+            else
+            {
+                try
+                {
+                    string pl = liClients.SelectedItem.ToString();
+                    Command.all.Find("unbanip").Use(null, cmbIpBans.SelectedItem.ToString());
+                }
+                catch
+                {
+                    MessageBox.Show("Incorrect IP/IP is not banned");
+                }
+            }
+        }
+
+        #endregion
+
+        private void liClients_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            LoadPlayersTab(sender, e);
+            txtPName.Text = playerstatsplayer.name;
+        }
+
+        private void label15_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void textBox3_TextChanged(object sender, EventArgs e)
+        {
+
+        }
+
+        private void btnSave_Click(object sender, EventArgs e)
+        {
+            if (levelGenerater != null)
+            {
+                levelGenerater.Save();
+                levelGenerater = null;
+            }
+            else
+            {
+                foreach (Level l in Server.levels)
+                {
+                    if (l.name == txtMapName.Text)
+                    {
+                        MessageBox.Show("Already exist!");
+                        return;
+                    }
+                }
+                levelGenerater = new Level(txtMapName.Text, ushort.Parse(x.SelectedItem.ToString()), ushort.Parse(y.SelectedItem.ToString()), ushort.Parse(z.SelectedItem.ToString()), cmbMapType.SelectedItem.ToString());
+                levelGenerater.Save();
+                levelGenerater = null;
+            }
+        }
+
+        private void btnShow_Click(object sender, EventArgs e)
+        {
+            string lvlName;
+            try
+            {
+                lvlName = LoadedMaps.SelectedItem.ToString();
+            }
+            catch
+            {
+                return;
+            }
+
+            generatorUsed = false;
+            foreach (Level l in Server.levels)
+            {
+                if (l.name == lvlName) { levelExisted = l; }
+            }
+            if (levelExisted != null)
+            {
+                switcherMap(levelExisted);
+            }
+            else { return; }
+        }
+
+        private void btnGenerate_Click(object sender, EventArgs e)
+        {
+            if (txtMapName.Text == "")
+            {
+                MessageBox.Show("Please enter a map name first", "No map name entered");
+            }
+            else
+            {
+                string lvl = txtMapName.Text;
+                foreach (Level l in Server.levels)
+                {
+                    if (l.name == lvl)
+                    {
+                        MessageBox.Show("Already exist!");
+                        return;
+                    }
+                }
+                levelGenerater = new Level(lvl, ushort.Parse(x.SelectedItem.ToString()), ushort.Parse(y.SelectedItem.ToString()), ushort.Parse(z.SelectedItem.ToString()), cmbMapType.SelectedItem.ToString());
+                generatorUsed = true;
+                switcherMap(levelGenerater);
+            }
+        }
+        //Set's picbox width/height, chooses, form or picbox in console
+        private void switcherMap(Level level)
+        {
+            if (level.width < 256 && level.height < 256)
+            {
+                map1.Size = new System.Drawing.Size(256, 256);
+                if (level.height > level.width && Math.Max(level.height, level.width) < 256)
+                {
+                    map1.Size = new System.Drawing.Size(256 / (level.height / level.width), 256);
+                }
+                else if (level.height < level.width && Math.Max(level.height, level.width) < 256)
+                {
+                    map1.Size = new System.Drawing.Size(256, 256 / (level.width / level.height));
+                }
+                if (mapStyle.SelectedItem.ToString() == "Standart" || mapStyle.SelectedItem.ToString() == "Height mask")
+                {
+                    map1.Image = GenerateMap(level);
+                    map1.Refresh();
+                }
+                else
+                {
+                    map1.Image = GenerateMap(level, ushort.Parse(txtLayer.Text.ToString()));
+                    map1.Refresh();
+                }
+            }
+            else
+            {
+                if (mapStyle.SelectedItem.ToString() == "Standart" || mapStyle.SelectedItem.ToString() == "Height mask")
+                {
+                    mapFormGen();
+                }
+                else
+                {
+                    mapFormGen(ushort.Parse(txtLayer.Text.ToString()));
+                }
+            }
+        }
+
+        //+ button
+        private void btnPlus_Click(object sender, EventArgs e)
+        {
+            int exp = 1;
+            if (generatorUsed && levelGenerater != null)
+            {
+                exp = levelGenerater.depth / 16;
+                if (levelGenerater.depth >= 512)
+                {
+                    exp *= levelGenerater.depth / 256;
+                }
+            }
+            else if (!generatorUsed && levelExisted != null)
+            {
+                exp = levelExisted.depth / 16;
+                if (levelExisted.depth >= 512)
+                {
+                    exp *= levelExisted.depth / 256;
+                }
+            }
+            if (mapStyle.Text.ToString() == "Height mask")
+            {
+                txtLayer.Text = (double.Parse(txtLayer.Text.ToString()) + 0.1 * exp).ToString();
+            }
+            else
+            {
+                try
+                {
+                    if (int.Parse(txtLayer.Text.ToString()) + 1 < 1024)
+                    {
+                        txtLayer.Text = (int.Parse(txtLayer.Text.ToString()) + 1).ToString();
+                        txtLayer.Refresh();
+                    }
+                }
+                catch { }
+            }
+        }
+
+        //- button
+        private void btnMinus_Click(object sender, EventArgs e)
+        {
+            if (mapStyle.Text.ToString() == "Height mask")
+            {
+                int exp = 1;
+                if (generatorUsed && levelGenerater != null)
+                {
+                    exp = levelGenerater.depth / 16;
+                    if (levelGenerater.depth >= 512)
+                    {
+                        exp *= levelGenerater.depth / 256;
+                    }
+                }
+                else if (!generatorUsed && levelExisted != null)
+                {
+                    exp = levelExisted.depth / 16;
+                    if (levelExisted.depth >= 512)
+                    {
+                        exp *= levelExisted.depth / 256;
+                    }
+                }
+                txtLayer.Text = (double.Parse(txtLayer.Text.ToString()) - 0.1 * exp).ToString();
+            }
+            else
+            {
+                try
+                {
+                    if (int.Parse(txtLayer.Text.ToString()) - 1 >= 0)
+                    {
+                        txtLayer.Text = (int.Parse(txtLayer.Text.ToString()) - 1).ToString();
+                        txtLayer.Refresh();
+                    }
+                }
+                catch { }
+            }
+        }
+
+        private void mapForm_Closed(object sender, EventArgs e)
+        {
+            formShow = false;
+        }
+
+        //generates mapform for Standart of Height Mask
+        private void mapFormGen()
+        {
+            map2.Name = "map2";
+            map2.Size = new System.Drawing.Size(levelGenerater.width * 2, levelGenerater.height * 2);
+            if (levelGenerater.height > levelGenerater.width && Math.Max(levelGenerater.height, levelGenerater.width) < 256)
+            {
+                map2.Size = new System.Drawing.Size(256 / (levelGenerater.height / levelGenerater.width), 256);
+            }
+            else if (levelGenerater.height < levelGenerater.width && Math.Max(levelGenerater.height, levelGenerater.width) < 256)
+            {
+                map2.Size = new System.Drawing.Size(256, 256 / (levelGenerater.width / levelGenerater.height));
+            }
+            map2.TabIndex = 0;
+            map2.TabStop = false;
+            map2.Image = GenerateMap(levelGenerater);
+            map2.Refresh();
+            mapForm.Size = new System.Drawing.Size(map2.Width, map2.Height);
+            if (!formShow)
+            {
+                mapForm.Show();
+                formShow = true;
+            }
+            else { mapForm.Refresh(); }
+            mapForm.Focus();
+        }
+
+        //generates mapform for Layer
+        private void mapFormGen(ushort layer)
+        {
+            map2.Name = "map2";
+            map2.Size = new System.Drawing.Size(levelGenerater.width * 2, levelGenerater.height * 2);
+            if (levelGenerater.height > levelGenerater.width && Math.Max(levelGenerater.height, levelGenerater.width) < 256)
+            {
+                map2.Size = new System.Drawing.Size(256 / (levelGenerater.height / levelGenerater.width), 256);
+            }
+            else if (levelGenerater.height < levelGenerater.width && Math.Max(levelGenerater.height, levelGenerater.width) < 256)
+            {
+                map2.Size = new System.Drawing.Size(256, 256 / (levelGenerater.width / levelGenerater.height));
+            }
+            map2.TabIndex = 0;
+            map2.TabStop = false;
+            map2.Image = GenerateMap(levelGenerater, layer);
+            map2.Refresh();
+            mapForm.Size = new System.Drawing.Size(map2.Width, map2.Height);
+            if (!formShow)
+            {
+                mapForm.Show();
+                formShow = true;
+            }
+            else { mapForm.Refresh(); }
+            mapForm.Focus();
+        }
+
+        //generates map for Standart of Height Mask
+        private Bitmap GenerateMap(Level lvl)
+        {
+            int pixels;
+            SolidBrush brush = new SolidBrush(Color.FromArgb(255, Color.Black));
+            if (Math.Max(lvl.height, lvl.width) < 256)
+            {
+                pixels = 256 / lvl.height;
+                if (lvl.height > lvl.width)
+                {
+                    pixels = 256 / lvl.height;
+                }
+                else if (lvl.height < lvl.width)
+                {
+                    pixels = 256 / lvl.width;
+                }
+            }
+            else
+            {
+                pixels = 2;
+            }
+            if (pixels > 16) { pixels = 16; }
+            Bitmap bm;
+            try
+            {
+                bm = new Bitmap("extra/textures/terrain" + pixels + ".png");
+            }
+            catch
+            {
+                MessageBox.Show("Missed texture files.");
+                return new Bitmap(256, 256);
+            }
+            Bitmap test = new Bitmap(lvl.width * pixels, lvl.height * pixels);
+            Graphics g = Graphics.FromImage(test);
+            byte type;
+            List<byte> above = new List<byte>();
+            Bitmap[] textures = new Bitmap[50];
+            for (int i = 0; i < 50; i++)
+            {
+                textures[i] = bm.Clone(new Rectangle(pixels * i, 0, pixels, pixels), System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            }
+            int highterBlock = 0;
+            int lovestBlock = 0;
+            if (mapStyle.SelectedItem.ToString() == "Height mask")
+            {
+                for (int y = (lvl.depth - 1); y >= 0; y--)
+                {
+                    for (ushort z = 0; z < lvl.height; z++)
+                    {
+                        for (ushort x = 0; x < lvl.width; x++)
+                        {
+                            type = lvl.GetTile(x, (ushort)y, z);
+                            type = Block.Convert(type);
+                            if (type != 8 || type != 9 || type != 20 || !(type >= 37 && type <= 40) || type != 18 || type != 0)
+                            {
+                                highterBlock = lvl.depth - y;
+                                y = -1;
+                                z = lvl.height;
+                                x = lvl.width;
+                            }
+                        }
+                    }
+                }
+                for (int y = 0; y < lvl.depth; y++)
+                {
+                    for (ushort z = 0; z < lvl.height; z++)
+                    {
+                        for (ushort x = 0; x < lvl.width; x++)
+                        {
+                            type = lvl.GetTile(x, (ushort)y, z);
+                            type = Block.Convert(type);
+                            if (type == 8 || type == 9 || type == 18 || type == 0)
+                            {
+                                lovestBlock = (int)y;
+                                y = lvl.depth;
+                                z = lvl.height;
+                                x = lvl.width;
+                            }
+                        }
+                    }
+                }
+            }
+            double param = lvl.depth * 2 / double.Parse(txtLayer.Text.ToString());
+            int meta, array;
+            double modifyer = 1;
+            switch (lvl.depth)
+            {
+                case 32:
+                    modifyer = 1;
+                    break;
+                case 64:
+                    modifyer = 1.4;
+                    break;
+                case 128:
+                    modifyer = 1.7;
+                    break;
+                case 256:
+                    modifyer = 1.9;
+                    break;
+                case 512:
+                    modifyer = 2;
+                    break;
+                case 1024:
+                    modifyer = 2;
+                    break;
+            }
+            for (ushort x = 0; x < lvl.width; x++)
+            {
+                for (ushort z = 0; z < lvl.height; z++)
+                {
+                    for (int y = (lvl.depth - 1); y >= 0; y--)
+                    {
+                        type = lvl.GetTile(x, (ushort)y, z);
+                        type = Block.Convert(type);
+                        if (type == 8 || type == 9 || type == 20 || (type >= 37 && type <= 40) || type == 18)
+                        {
+                            above.Add(type);
+                        }
+                        else if (lvl.GetTile(x, (ushort)y, z) != 0)
+                        {
+                            g.DrawImage(textures[type], x * pixels, z * pixels);
+                            if (mapStyle.SelectedItem.ToString() == "Height mask")
+                            {
+                                meta = (int)(param * (y - modifyer * lovestBlock / 2 - highterBlock));
+                                if (meta > 255) { meta = 255; }
+                                else if (meta < 0) { meta = 0; }
+                                brush = new SolidBrush(Color.FromArgb((255 - meta), Color.Black));
+                                g.FillRectangle(brush, x * pixels, z * pixels, pixels, pixels);
+                            }
+                            if (above.Count != 0)
+                            {
+                                array = 1;
+                                while (above[0] != 0)
+                                {
+                                    g.DrawImage(textures[above[above.Count - array]], x * pixels, z * pixels);
+                                    above[above.Count - array] = 0;
+                                    array++;
+                                }
+                            }
+
+                            y = -1;
+                        }
+                    }
+                }
+            }
+            g.Dispose();
+            return test;
+        }
+
+        //generates map for Layer
+        private Bitmap GenerateMap(Level lvl, ushort layer)
+        {
+            int pixels;
+            if (Math.Max(lvl.height, lvl.width) < 256)
+            {
+                pixels = 256 / lvl.height;
+                if (lvl.height > lvl.width)
+                {
+                    pixels = 256 / lvl.height;
+                }
+                else if (lvl.height < lvl.width)
+                {
+                    pixels = 256 / lvl.width;
+                }
+            }
+            else
+            {
+                pixels = 2;
+            }
+            if (pixels > 16) { pixels = 16; }
+            Bitmap bm = new Bitmap("extra/textures/terrain" + pixels + ".png");
+            Bitmap test = new Bitmap(lvl.width * pixels, lvl.height * pixels);
+            Graphics g = Graphics.FromImage(test);
+            byte type;
+            Bitmap[] textures = new Bitmap[50];
+            for (int i = 0; i < 50; i++)
+            {
+                textures[i] = bm.Clone(new Rectangle(pixels * i, 0, pixels, pixels), System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            }
+            for (ushort x = 0; x < lvl.width; x++)
+            {
+                for (ushort z = 0; z < lvl.height; z++)
+                {
+                    if (layer > lvl.depth - 1) { layer = (ushort)(lvl.depth - 1); }
+                    type = lvl.GetTile(x, (ushort)(layer - 1), z);
+                    type = Block.Convert(type);
+                    g.DrawImage(textures[type], x * pixels, z * pixels);
+                }
+            }
+            g.Dispose();
+            return test;
+        }
+
+        private void mapStyle_SelectionChangeCommitted(object sender, EventArgs e)
+        {
+            if (mapStyle.SelectedItem.ToString() == "Height mask")
+            {
+                txtLayer.Text = "2";
+                txtLayer.Refresh();
+            }
+            else if (mapStyle.SelectedItem.ToString() == "Layer")
+            {
+                txtLayer.Text = "15";
+                txtLayer.Refresh();
+            }
+            else
+            {
+                txtLayer.Text = "0";
+                txtLayer.Refresh();
+            }
+            if (generatorUsed && levelGenerater != null) { switcherMap(levelGenerater); }
+            else if (!generatorUsed && levelExisted != null) { switcherMap(levelExisted); }
+        }
+
+        //Fix needed
+        private void txtLayer_ChangedText(object sender, EventArgs e)
+        {
+            if ((double.Parse(txtLayer.Text.ToString())).ToString() != txtLayer.Text.ToString())
+            {
+                txtLayer.Text = "1";
+                return;
+            }
+            else if (generatorUsed && levelGenerater != null) { switcherMap(levelGenerater); }
+            else if (!generatorUsed && levelExisted != null) { switcherMap(levelExisted); }
         }
     }
 }

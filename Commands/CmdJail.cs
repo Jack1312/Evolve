@@ -50,10 +50,20 @@ namespace MCLawl
                 {
                     if (!who.jailed)
                     {
-                        if (p != null) if (who.group.Permission >= p.group.Permission) { Player.SendMessage(p, "Cannot jail someone of equal or greater rank."); return; }
-                        if (who.level != p.level) Command.all.Find("goto").Use(who, p.level.name);
+                        if (p != null)
+                        {
+                            if (who.group.Permission >= p.group.Permission)
+                            {
+                                Player.SendMessage(p, "Cannot jail someone of equal or greater rank.");
+                                return;
+                            }
+                            if (who.level != p.level)
+                            {
+                                Command.all.Find("goto").Use(who, p.level.name);
+                            }
+                        }
                         Player.GlobalDie(who, false);
-                        Player.GlobalSpawn(who, p.level.jailx, p.level.jaily, p.level.jailz, p.level.jailrotx, p.level.jailroty, true);
+                        Player.GlobalSpawn(who, who.level.jailx, who.level.jaily, who.level.jailz, who.level.jailrotx, who.level.jailroty, true);
                         who.jailed = true;
                         Player.GlobalChat(null, who.color + who.name + Server.DefaultColor + " was &8jailed", false);
                     }
@@ -61,6 +71,15 @@ namespace MCLawl
                     {
                         who.jailed = false;
                         Player.GlobalChat(null, who.color + who.name + Server.DefaultColor + " was &afreed" + Server.DefaultColor + " from jail", false);
+                        ushort x = (ushort)((0.5 + who.level.spawnx) * 32);
+                        ushort y = (ushort)((1 + who.level.spawny) * 32);
+                        ushort z = (ushort)((0.5 + who.level.spawnz) * 32);
+                        unchecked
+                        {
+                            who.SendPos((byte)-1, x, y, z,
+                                        who.level.rotx,
+                                        who.level.roty);
+                        }
                     }
                 }
                 else

@@ -1,7 +1,7 @@
 ﻿/*
 	Copyright 2010 MCSharp team (Modified for use with MCZall/MCLawl/Evolve) 
     Dual-Licensed under the Educational Community License, Version 2.0 and
-    the binpress license you mayy not use this file except in compliance with 
+    the binpress license you may not use this file except in compliance with 
     the License. You may obtain a copy of the Licenses at
 	
 	http://www.osedu.org/licenses/ECL-2.0
@@ -27,6 +27,7 @@ using System.Data;
 using System.Drawing;
 using System.Linq;
 using System.Text;
+using System.Net.Sockets;
 using System.Windows.Forms;
 using System.IO;
 
@@ -55,17 +56,25 @@ namespace MCLawl.Gui
             cmbColor.Items.AddRange(colors);
 
             string opchatperm = "";
+            string adminchatperm = "";
             foreach (Group grp in Group.GroupList)
             {
                 cmbDefaultRank.Items.Add(grp.name);
                 cmbOpChat.Items.Add(grp.name);
+                cmbAdminChat.Items.Add(grp.name);
                 if (grp.Permission == Server.opchatperm)
                 {
                     opchatperm = grp.name;
                 }
+                if (grp.Permission == Server.adminchatperm)
+                {
+                    adminchatperm = grp.name;
+                }
+                    
             }
             cmbDefaultRank.SelectedIndex = 1;
             cmbOpChat.SelectedIndex = (opchatperm != "") ? cmbOpChat.Items.IndexOf(opchatperm) : 1;
+            cmbAdminChat.SelectedIndex = (adminchatperm != "") ? cmbAdminChat.Items.IndexOf(adminchatperm) : 1;
             
             //Load server stuff
             LoadProp("properties/server.properties");
@@ -357,6 +366,40 @@ namespace MCLawl.Gui
                             case "host-state":
                                 if (value != "") txtHost.Text = value;
                                 break;
+                            case "usemysql":
+                                chkSQL.Checked = (value.ToLower() == "true") ? true : false;
+                                break;
+                            case "host":
+                                txtSQLHost.Text = value;
+                                try
+                                {
+                                    System.Net.IPAddress.Parse(value);
+                                }
+                                catch
+                                {
+                                    txtSQLHost.Text = "127.0.0.1";
+                                }
+                                break;
+                            case "sqlport":
+                                txtSQLPort.Text = value;
+                                try
+                                {
+                                    int.Parse(value);
+                                }
+                                catch
+                                {
+                                    txtSQLPort.Text = "3306";
+                                }
+                                break;
+                            case "username":
+                                txtSQLUsername.Text = value;
+                                break;
+                            case "password":
+                                txtSQLPassword.Text = value;
+                                break;
+                            case "databasename":
+                                txtSQLDatabase.Text = value;
+                                break;
                         }
                     }
                 }
@@ -402,6 +445,8 @@ namespace MCLawl.Gui
                     w.WriteLine("#   overload\t=\tThe higher this is, the longer the physics is allowed to lag. Default 1500");
                     w.WriteLine("#   use-whitelist\t=\tSwitch to allow use of a whitelist to override IP bans for certain players.  Default false.");
                     w.WriteLine("#   force-cuboid\t=\tRun cuboid until the limit is hit, instead of canceling the whole operation.  Default false.");
+                    w.WriteLine("#   opchat-perm\t=\tThe permission level required to view opchat.");
+                    w.WriteLine("#   adminchat-perm\t=\tThe permission level required to view adminchat.");
                     w.WriteLine();
                     w.WriteLine("#   Host\t=\tThe host name for the database (usually 127.0.0.1)");
                     w.WriteLine("#   SQLPort\t=\tPort number to be used for MySQL.  Unless you manually changed the port, leave this alone.  Default 3306.");
@@ -453,6 +498,7 @@ namespace MCLawl.Gui
                     w.WriteLine("use-whitelist = " + Server.useWhitelist.ToString().ToLower());
                     w.WriteLine("money-name = " + txtMoneys.Text);
                     w.WriteLine("opchat-perm = " + ((sbyte)Group.GroupList.Find(grp => grp.name == cmbOpChat.Items[cmbOpChat.SelectedIndex].ToString()).Permission).ToString());
+                    w.WriteLine("adminchat-perm = " + ((sbyte)Group.GroupList.Find(grp => grp.name == cmbAdminChat.Items[cmbAdminChat.SelectedIndex].ToString()).Permission).ToString());
                     w.WriteLine("log-heartbeat = " + chkLogBeat.Checked.ToString().ToLower());
                     w.WriteLine("force-cuboid = " + chkForceCuboid.Checked.ToString().ToLower());
                     w.WriteLine("repeat-messages = " + chkRepeatMessages.Checked.ToString());
@@ -466,12 +512,12 @@ namespace MCLawl.Gui
                     w.WriteLine("report-back = " + Server.reportBack.ToString().ToLower());
                     w.WriteLine();
                     w.WriteLine("#MySQL information");
-                    w.WriteLine("UseMySQL = " + Server.useMySQL);
-                    w.WriteLine("Host = " + Server.MySQLHost);
-                    w.WriteLine("SQLPort = " + Server.MySQLPort);
-                    w.WriteLine("Username = " + Server.MySQLUsername);
-                    w.WriteLine("Password = " + Server.MySQLPassword);
-                    w.WriteLine("DatabaseName = " + Server.MySQLDatabaseName);
+                    w.WriteLine("UseMySQL = " + chkSQL.Checked.ToString());
+                    w.WriteLine("Host = " + txtSQLHost.Text);
+                    w.WriteLine("SQLPort = " + txtSQLPort.Text);
+                    w.WriteLine("Username = " + txtSQLUsername.Text);
+                    w.WriteLine("Password = " + txtSQLPassword.Text);
+                    w.WriteLine("DatabaseName = " + txtSQLDatabase.Text);
                     w.WriteLine("Pooling = " + Server.MySQLPooling);
                     w.WriteLine();
                     w.WriteLine("#Colors");
@@ -519,17 +565,12 @@ namespace MCLawl.Gui
         }
 
         private void txtPort_TextChanged(object sender, EventArgs e) { removeDigit(txtPort); }
-        private void txtPlayers_TextChanged(object sender, EventArgs e) { removeDigit(txtPlayers); }
-        private void txtMaps_TextChanged(object sender, EventArgs e) { removeDigit(txtMaps); }
         private void txtBackup_TextChanged(object sender, EventArgs e) { removeDigit(txtBackup); }
         private void txtDepth_TextChanged(object sender, EventArgs e) { removeDigit(txtDepth); }
 
-        private void btnSave_Click(object sender, EventArgs e) { saveStuff(); Dispose(); }
-        private void btnApply_Click(object sender, EventArgs e) { saveStuff(); }
-
         void saveStuff() {
-            foreach (Control tP in tabControl.Controls)
-                if (tP is TabPage && tP != tabPage3 && tP != tabPage5) 
+            foreach (Control tP in tabControl1.Controls)
+                if (tP is TabPage && tP != tabPage6 && tP != tabPage5) 
                     foreach (Control ctrl in tP.Controls)
                         if (ctrl is TextBox) 
                             if (ctrl.Text == "") {
@@ -544,10 +585,6 @@ namespace MCLawl.Gui
 
             Properties.Load("properties/server.properties", true);
             GrpCommands.fillRanks();
-        }
-
-        private void btnDiscard_Click(object sender, EventArgs e) {
-            this.Dispose();
         }
 
         private void toolTip_Popup(object sender, PopupEventArgs e)
@@ -847,5 +884,30 @@ namespace MCLawl.Gui
             messageInfo += Player.storedHelp;
             MessageBox.Show(messageInfo);
         }
+
+        private void linkLabel1_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
+        {
+            System.Diagnostics.Process.Start("http://dev.mysql.com/downloads/");
+        }
+        
+        private void btnSave_Click(object sender, EventArgs e)
+        {
+            { saveStuff(); Dispose(); }
+        }
+
+        private void btnDiscard_Click(object sender, EventArgs e)
+        {
+            this.Dispose();
+        }
+
+        private void btnApply_Click(object sender, EventArgs e)
+        {
+            saveStuff();
+        }      
     }
 }
+        
+    
+
+        
+

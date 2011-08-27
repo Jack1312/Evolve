@@ -53,17 +53,31 @@ namespace MCLawl
 
             for (ushort yy = currentY; yy <= 1000; yy++)
             {
-                if (!Block.Walkthrough(p.level.GetTile(currentX, yy, currentZ)) && p.level.GetTile(currentX, yy, currentZ) != Block.Zero)
+                if (!Block.Walkthrough(who.level.GetTile(currentX, yy, currentZ)) && who.level.GetTile(currentX, yy, currentZ) != Block.Zero)
                 {
                     foundHeight = (ushort)(yy - 1);
-                    who.level.ChatLevel(who.color + who.name + Server.DefaultColor + " was slapped into the roof by " + p.color + p.name);
+                    if (p == null)
+                    {
+                        who.level.ChatLevel(who.color + who.name + Server.DefaultColor + " was slapped into the roof by unknown forces!");
+                    }
+                    else
+                    {
+                        who.level.ChatLevel(who.color + who.name + Server.DefaultColor + " was slapped into the roof by " + p.color + p.name);
+                    }
                     break;
                 }
             }
 
             if (foundHeight == 0)
             {
-                who.level.ChatLevel(who.color + who.name + Server.DefaultColor + " was slapped sky high by " + p.color + p.name);
+                if (p == null)
+                {
+                    who.level.ChatLevel(who.color + who.name + Server.DefaultColor + " was slapped sky high by unknown forces!");
+                }
+                else
+                {
+                    who.level.ChatLevel(who.color + who.name + Server.DefaultColor + " was slapped sky high by " + p.color + p.name);
+                }
                 foundHeight = 1000;
             }
             

@@ -35,6 +35,7 @@ namespace MCLawl.Gui
         /// <param name="disposing">true if managed resources should be disposed; otherwise, false.</param>
         protected override void Dispose(bool disposing)
         {
+            FadeEffect.FadeForm(this, 10);
             if (disposing && (components != null))
             {
                 components.Dispose();

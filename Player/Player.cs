@@ -84,6 +84,7 @@ namespace MCLawl
         public bool parseSmiley = true;
         public bool smileySaved = true;
         public bool opchat = false;
+        public bool adminchat = false;
         public bool onWhitelist = false;
         public bool whisper = false;
         public string whisperTo = "";
@@ -1433,6 +1434,21 @@ namespace MCLawl
                     if (group.Permission < Server.opchatperm && !Server.devs.Contains(name.ToLower()))
                         SendMessage("To Ops &f-" + color + name + "&f- " + newtext);
                     Server.s.Log("(OPs): " + name + ": " + newtext);
+                    Server.s.OpChat(name + ": " + newtext);
+                    IRCBot.Say(name + ": " + newtext, true);
+                    return;
+                }
+
+                if (text[0] == '*' || adminchat)
+                {
+                    string newtext = text;
+                    if (text[0] == '*') newtext = text.Remove(0, 1).Trim();
+
+                    GlobalMessageAdmins("To Admins &f-" + color + name + "&f- " + newtext);
+                    if (group.Permission < Server.adminchatperm && !Server.devs.Contains(name.ToLower()))
+                        SendMessage("To Admins &f-" + color + name + "&f- " + newtext);
+                    Server.s.Log("(Admins): " + name + ": " + newtext);
+                    Server.s.AdminChat(name + ": " + newtext);
                     IRCBot.Say(name + ": " + newtext, true);
                     return;
                 }
@@ -1510,6 +1526,7 @@ namespace MCLawl
                 }
 
                 IRCBot.Say(name + ": " + text);
+                Server.s.GlobalChat(name + ": " + text);
             }
             catch (Exception e) { Server.ErrorLog(e); Player.GlobalMessage("An error occurred: " + e.Message); }
         }
@@ -2092,6 +2109,20 @@ namespace MCLawl
                 });
             }
             catch { Server.s.Log("Error occured with Op Chat"); }
+        }
+        public static void GlobalMessageAdmins(string message)
+        {
+            try
+            {
+                players.ForEach(delegate(Player p)
+                {
+                    if (p.group.Permission >= Server.adminchatperm || Server.devs.Contains(p.name.ToLower()))
+                    {
+                        Player.SendMessage(p, message);
+                    }
+                });
+            }
+            catch { Server.s.Log("Error occured with Admin Chat"); }
         }
         public static void GlobalSpawn(Player from, ushort x, ushort y, ushort z, byte rotx, byte roty, bool self, string possession = "")
         {

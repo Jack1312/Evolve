@@ -70,6 +70,7 @@
     <Reference Include="PresentationFramework" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="System.DirectoryServices" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="System.Data" />
@@ -84,8 +85,12 @@
   <ItemGroup>
     <Compile Include="AutoSaver.cs" />
     <Compile Include="Block.cs" />
+    <Compile Include="Commands\CmdAdminChat.cs" />
+    <Compile Include="Commands\CmdImpersonate.cs" />
+    <Compile Include="Commands\CmdOHide.cs" />
     <Compile Include="Commands\CmdPatrol.cs" />
     <Compile Include="Commands\CmdPossess.cs" />
+    <Compile Include="Commands\CmdSendCmd.cs" />
     <Compile Include="Commands\CmdTColor.cs" />
     <Compile Include="Commands\CmdCmdUnload.cs" />
     <Compile Include="Commands\CmdCmdLoad.cs" />
@@ -115,6 +120,7 @@
     <Compile Include="Commands\CmdAwards.cs" />
     <Compile Include="Commands\CmdAwardMod.cs" />
     <Compile Include="Commands\CmdXBan.cs" />
+    <Compile Include="Commands\CmdXHide.cs" />
     <Compile Include="Commands\CmdXUndo.cs" />
     <Compile Include="CTFGame.cs" />
     <Compile Include="FindReference.cs" />
@@ -254,6 +260,7 @@
     <Compile Include="Commands\CmdText.cs" />
     <Compile Include="Commands\CmdView.cs" />
     <Compile Include="GlobalSuppressions.cs" />
+    <Compile Include="GUI\FadeEffect.cs" />
     <Compile Include="GUI\PropertyWindow.cs">
       <SubType>Form</SubType>
     </Compile>

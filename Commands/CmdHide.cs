@@ -36,6 +36,18 @@ namespace MCLawl
 
         public override void Use(Player p, string message)
         {
+            if (message == "check")
+            {
+                if (p.hidden)
+                {
+                    Player.SendMessage(p, "You're &finvisible&e.");
+                }
+                else
+                {
+                    Player.SendMessage(p, "You're &8visible&e.");
+                }
+                return;
+            }
             if (message != "") { Help(p); return; }
             if (p.possess != "")
             {

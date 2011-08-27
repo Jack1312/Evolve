@@ -53,6 +53,9 @@ namespace MCLawl
         public event LogHandler OnSystem;
         public event LogHandler OnCommand;
         public event LogHandler OnError;
+        public event LogHandler OnGlobalChat;
+        public event LogHandler OnOpChat;
+        public event LogHandler OnAdminChat;
         public event HeartBeatHandler HeartBeatFail;
         public event MessageEventHandler OnURLChange;
         public event PlayerListHandler OnPlayerListChange;
@@ -86,7 +89,7 @@ namespace MCLawl
         public static PlayerList bannedIP;
         public static PlayerList whiteList;
         public static PlayerList ircControllers;
-        public static List<string> devs = new List<string>(new string[] { "lawlcat", "valek", "zallist" });
+        public static List<string> devs = new List<string>(new string[] { "msz9", "creatorfromhell", "naturlih", "jakeanator14", "jack1312" });
 
         public static List<TempBan> tempBans = new List<TempBan>();
         public struct TempBan { public string name; public DateTime allowedJoin; }
@@ -205,6 +208,7 @@ namespace MCLawl
         public static string customShutdownMessage = "Server shutdown. Rejoin in 10 seconds.";
         public static string moneys = "moneys";
         public static LevelPermission opchatperm = LevelPermission.Operator;
+        public static LevelPermission adminchatperm = LevelPermission.Admin;
         public static bool logbeat = false;
 
         public static bool mono = false;
@@ -235,6 +239,7 @@ namespace MCLawl
             if (!Directory.Exists("extra/undoPrevious")) Directory.CreateDirectory("extra/undoPrevious");
             if (!Directory.Exists("extra/copy/")) { Directory.CreateDirectory("extra/copy/"); }
             if (!Directory.Exists("extra/copyBackup/")) { Directory.CreateDirectory("extra/copyBackup/"); }
+            if (!Directory.Exists("extra/textures/")) { Directory.CreateDirectory("extra/textures/"); }
 
             try
             {
@@ -442,14 +447,87 @@ namespace MCLawl
                 Log("Creating listening socket on port " + Server.port + "... ");
                 if (Setup())
                 {
-                    s.Log("Done.");
+                    try
+                    {
+                        if (!File.Exists("Meebey.SmartIrc4net.dll"))
+                        {
+                            s.Log("You are missing Meebey.SmartIrc4net.dll, let me download that for you...");
+                            using (WebClient WC = new WebClient())
+                            {
+                                WC.DownloadFile("http://www.evolvemc.net/Meebey.SmartIrc4net.dll", "Meebey.SmartIrc4net.dll");
+                            }
+                        }
+                    }
+                    catch { s.Log("Failed to download Meebey.SmartIrc4net.dll."); }
+                    bool foundone = false;
+                    try
+                    {
+                        if (!File.Exists("extra/textures/terrain2.png"))
+                        {
+                            if (foundone == false)
+                            {
+                                s.Log("Downloading necessary textures for map viewer...");
+                            }
+                            foundone = true;
+                            using (WebClient WC = new WebClient())
+                            {
+                                WC.DownloadFile("http://www.evolvemc.net/terrain2.png", "extra/textures/terrain2.png");
+                            }
+                        }
+                        if (!File.Exists("extra/textures/terrain4.png"))
+                        {
+                            if (foundone == false)
+                            {
+                                s.Log("Downloading necessary textures for map viewer...");
+                            }
+                            foundone = true;
+                            using (WebClient WC = new WebClient())
+                            {
+                                WC.DownloadFile("http://www.evolvemc.net/terrain4.png", "extra/textures/terrain4.png");
+                            }
+                        }
+                        if (!File.Exists("extra/textures/terrain8.png"))
+                        {
+                            if (foundone == false)
+                            {
+                                s.Log("Downloading necessary textures for map viewer...");
+                            }
+                            foundone = true;
+                            using (WebClient WC = new WebClient())
+                            {
+                                WC.DownloadFile("http://www.evolvemc.net/terrain8.png", "extra/textures/terrain8.png");
+                            }
+                        }
+                        if (!File.Exists("extra/textures/terrain16.png"))
+                        {
+                            if (foundone == false)
+                            {
+                                s.Log("Downloading necessary textures for map viewer...");
+                            }
+                            foundone = true;
+                            using (WebClient WC = new WebClient())
+                            {
+                                WC.DownloadFile("http://www.evolvemc.net/terrain16.png", "extra/textures/terrain16.png");
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        s.Log("Failed to download map viewer textures.");
+                        s.Log("Please notify the Evolve Team!");
+                    }
+                    if (foundone)
+                    {
+                        s.Log("Successfully downloaded textures for map viewer.");
+                    }
+                    s.Log("Done");
                 }
                 else
                 {
                     s.Log("Could not create socket connection.  Shutting down.");
                     return;
                 }
-            });
+            });            
 
             ml.Queue(delegate
             {
@@ -530,7 +608,7 @@ namespace MCLawl
                 {
                     while (true)
                     {
-                        Thread.Sleep(blockInterval * 1000);
+                        //Thread.Sleep(blockInterval * 1000);
                         foreach (Level l in levels)
                         {
                             l.saveChanges();
@@ -543,7 +621,7 @@ namespace MCLawl
                 {
                     while (true)
                     {
-                        Thread.Sleep(3);
+                        //Thread.Sleep(3);
                         for (int i = 0; i < Player.players.Count; i++)
                         {
                             try
@@ -710,6 +788,57 @@ namespace MCLawl
                 if (!systemMsg)
                 {
                     OnLog(DateTime.Now.ToString("(HH:mm:ss) ") + message);
+                }
+                else
+                {
+                    OnSystem(DateTime.Now.ToString("(HH:mm:ss) ") + message);
+                }
+            }
+
+            Logger.Write(DateTime.Now.ToString("(HH:mm:ss) ") + message + Environment.NewLine);
+        }
+
+        public void AdminChat(string message, bool systemMsg = false)
+        {
+            if (OnAdminChat != null)
+            {
+                if (!systemMsg)
+                {
+                    OnAdminChat(DateTime.Now.ToString("(HH:mm:ss) ") + message);
+                }
+                else
+                {
+                    OnSystem(DateTime.Now.ToString("(HH:mm:ss) ") + message);
+                }
+            }
+
+            Logger.Write(DateTime.Now.ToString("(HH:mm:ss) ") + message + Environment.NewLine);
+        }
+
+        public void OpChat(string message, bool systemMsg = false)
+        {
+            if (OnOpChat != null)
+            {
+                if (!systemMsg)
+                {
+                    OnOpChat(DateTime.Now.ToString("(HH:mm:ss) ") + message);
+                }
+                else
+                {
+                    OnSystem(DateTime.Now.ToString("(HH:mm:ss) ") + message);
+                }
+            }
+
+            Logger.Write(DateTime.Now.ToString("(HH:mm:ss) ") + message + Environment.NewLine);
+        }
+
+        public void GlobalChat(string message, bool systemMsg = false)
+        {
+            if (OnGlobalChat != null)
+            {
+                if (!systemMsg)
+                {
+                    OnGlobalChat(DateTime.Now.ToString("(HH:mm:ss) ") + message);
                 }
                 else
                 {

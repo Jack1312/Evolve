@@ -28,7 +28,7 @@ namespace MCLawl
     public class CmdInvincible : Command
     {
         public override string name { get { return "invincible"; } }
-        public override string shortcut { get { return ""; } }
+        public override string shortcut { get { return "inv"; } }
         public override string type { get { return "other"; } }
         public override bool museumUsable { get { return true; } }
         public override LevelPermission defaultRank { get { return LevelPermission.Operator; } }
